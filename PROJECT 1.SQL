@@ -134,6 +134,7 @@ SET QTR_ID = 3 WHERE EXTRACT(MONTH from orderdate )
 UPDATE sales_dataset_rfm_prj 
 SET QTR_ID = 4 WHERE EXTRACT(MONTH from orderdate ) 
 	IN (10,11,12) 
+*** có extract quarter 
 
 UPDATE sales_dataset_rfm_prj 
 SET MONTH_ID =  EXTRACT(MONTH from orderdate ) 
