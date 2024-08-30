@@ -119,8 +119,109 @@ WITH cte AS (
     sold_at IS NOT NULL
   GROUP BY 
     product_category, dates
-)
-SELECT * 
+)SELECT * 
 FROM cte
 WHERE SUBSTRING(CAST(dates AS STRING), 1, 7) IN ('2022-04','2022-03','2022-02','2022-01')
 ORDER BY dates DESC
+
+II. 
+
+- Phân tích các bảng: 
++ Bảng Order: order_id, user_id, status,gender, created_at, num_of_items: 125375 bảng ghi 
++ Bảng Orderitems:id,order_id,user_id,product_id,status,created_at,sales_price 181717 bảng ghi
++ Bảng product: id, cost, retail_price 29120 bảng ghi
+
+- OUTPUT METRICS: 
+
+with cte1 as (SELECT 
+    SUBSTRING(CAST(o.created_at as string),1,7)  AS month,
+    SUM(oi.sale_price) AS TPV,
+    COUNT(oi.order_id) AS TPO,
+    SUM(p.cost) AS total_cost,
+    SUM(oi.sale_price) - SUM(p.cost) AS total_profit,
+FROM 
+ bigquery-public-data.thelook_ecommerce.orders AS o
+JOIN 
+bigquery-public-data.thelook_ecommerce.order_items AS oi ON o.order_id = oi.order_id
+JOIN 
+bigquery-public-data.thelook_ecommerce.products AS p ON oi.id = p.id
+GROUP BY 
+  SUBSTRING(CAST(o.created_at as string),1,7) ),
+  cte2 as 
+--- do cái bảng một em ko lấy category được do bị dính group by, ko biết còn cách nào khác nhanh hơn không ạ --- 
+(
+  SELECT *,
+    SUBSTRING(CAST(a.created_at as string),1,7)  AS month,
+    c.category as product_category 
+from bigquery-public-data.thelook_ecommerce.orders AS a 
+JOIN 
+bigquery-public-data.thelook_ecommerce.order_items AS b ON a.order_id = b.order_id
+JOIN 
+bigquery-public-data.thelook_ecommerce.products AS c ON b.id = c.id
+),
+cte3 as 
+(
+select month,
+SUBSTRING(month,1,4) as year,TPV,TPO,
+ round((100.00* ( TPV - lag(TPV) OVER( ORDER BY month)) /lag(TPV) OVER( ORDER BY month)),2) || '%' as revenue_growth, 
+ round((100.00* ( TPO - lag(TPO) OVER( ORDER BY month)) /lag(TPO) OVER( ORDER BY month)),2) || '%' as order_growth,
+ total_cost,total_profit,
+ total_profit/total_cost as Profit_to_cost_ratio
+from cte1 
+ORDER BY month)
+select table3.month,table3.year,table2.product_category,table3.TPV,table3.TPO,table3.revenue_growth,
+table3.order_growth,table3.total_cost,table3.total_profit,table3.Profit_to_cost_ratio from cte3 as table3 
+JOIN cte2 as table2 
+ON table2.month = table3.month 
+ORDER BY table3.month 
+
+Tạo view
+CREATE VIEW bigquery-public-data.thelook_ecommerce.vw_ecommerce_analyst as
+(
+with cte1 as (SELECT 
+    SUBSTRING(CAST(o.created_at as string),1,7)  AS month,
+    SUM(oi.sale_price) AS TPV,
+    COUNT(oi.order_id) AS TPO,
+    SUM(p.cost) AS total_cost,
+    SUM(oi.sale_price) - SUM(p.cost) AS total_profit,
+FROM 
+ bigquery-public-data.thelook_ecommerce.orders AS o
+JOIN 
+bigquery-public-data.thelook_ecommerce.order_items AS oi ON o.order_id = oi.order_id
+JOIN 
+bigquery-public-data.thelook_ecommerce.products AS p ON oi.id = p.id
+GROUP BY 
+  SUBSTRING(CAST(o.created_at as string),1,7) ),
+  cte2 as 
+(
+  SELECT *,
+    SUBSTRING(CAST(a.created_at as string),1,7)  AS month,
+    c.category as product_category 
+from bigquery-public-data.thelook_ecommerce.orders AS a 
+JOIN 
+bigquery-public-data.thelook_ecommerce.order_items AS b ON a.order_id = b.order_id
+JOIN 
+bigquery-public-data.thelook_ecommerce.products AS c ON b.id = c.id
+),
+cte3 as 
+(
+select month,
+SUBSTRING(month,1,4) as year,TPV,TPO,
+ round((100.00* ( TPV - lag(TPV) OVER( ORDER BY month)) /lag(TPV) OVER( ORDER BY month)),2) || '%' as revenue_growth, 
+ round((100.00* ( TPO - lag(TPO) OVER( ORDER BY month)) /lag(TPO) OVER( ORDER BY month)),2) || '%' as order_growth,
+ total_cost,total_profit,
+ total_profit/total_cost as Profit_to_cost_ratio
+from cte1 
+ORDER BY month)
+ 
+select table3.month,table3.year,table2.product_category,table3.TPV,table3.TPO,table3.revenue_growth,
+table3.order_growth,table3.total_cost,table3.total_profit,table3.Profit_to_cost_ratio from cte3 as table3 
+JOIN cte2 as table2 
+ON table2.month = table3.month 
+ORDER BY table3.month )
+Nó để lỗi là:
+Access Denied: Dataset bigquery-public-data:thelook_ecommerce: Permission bigquery.tables.create denied on dataset bigquery-public-data:thelook_ecommerce (or it may not exist).
+
+----
+
+
